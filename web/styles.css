@@ -6,3 +6,6 @@
 
 /* Public identity check, usable before the contracts are deployed. */
 .public-checker{margin-top:17px}.identity-check-row{display:flex;gap:12px;align-items:end}.identity-check-row>label{flex:1;min-width:0}.identity-check-row>button{white-space:nowrap}.identity-check-row+.status-line{margin-top:15px;overflow-wrap:anywhere}@media(max-width:540px){.identity-check-row{display:block}.identity-check-row>button{width:100%}}
+
+/* Explicit review of a payload before human signature. */
+.verification-note{margin-top:10px;padding:11px 13px;border:1px solid #33465d;border-radius:10px;font-size:13px;line-height:1.5;color:#d1dded;overflow-wrap:anywhere}button:disabled{opacity:.45;cursor:not-allowed;filter:grayscale(.3)}button:disabled:hover{transform:none}

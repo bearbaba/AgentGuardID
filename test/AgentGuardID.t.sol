@@ -190,6 +190,67 @@ contract AgentGuardIDTest {
         guard.approveAuthorization(id);
     }
 
+    function testHumanCannotApproveOwnAgentAction() public {
+        ids.mintForTest(HUMAN);
+        vm.prank(HUMAN);
+        vm.expectRevert(AgentGuardID.SeparationRequired.selector);
+        guard.createWorkspace(HUMAN, 2);
+        vm.prank(HUMAN);
+        vm.expectRevert(AgentGuardID.SeparationRequired.selector);
+        guard.setAgent(1, HUMAN);
+    }
+
+    function testExplainRequestedAndReady() public {
+        uint256 id = _request();
+        (AgentGuardID.Decision pending, uint256 used, uint256 limit) = guard.explainAuthorization(id);
+        require(pending == AgentGuardID.Decision.NOT_APPROVED && used == 0 && limit == 2, "pending explanation");
+        _approve(id);
+        (AgentGuardID.Decision ready,,) = guard.explainAuthorization(id);
+        require(ready == AgentGuardID.Decision.READY, "approval ready");
+        vm.prank(AGENT);
+        app.recordTask(id, HASH);
+        (AgentGuardID.Decision consumed,,) = guard.explainAuthorization(id);
+        require(consumed == AgentGuardID.Decision.NOT_APPROVED, "consumed not ready");
+    }
+
+    function testExplainUnknownAndRevokedTarget() public {
+        (AgentGuardID.Decision unknown,,) = guard.explainAuthorization(777);
+        require(unknown == AgentGuardID.Decision.UNKNOWN_ACTION, "unknown action");
+        uint256 id = _request();
+        _approve(id);
+        vm.prank(HUMAN);
+        guard.setTarget(1, address(app), false);
+        (AgentGuardID.Decision revoked,,) = guard.explainAuthorization(id);
+        require(revoked == AgentGuardID.Decision.TARGET_REVOKED, "revoked target");
+    }
+
+    function testExplainExpiredAndQuotaReached() public {
+        uint256 expiredId = _request();
+        _approve(expiredId);
+        vm.warp(block.timestamp + 1 days + 1);
+        (AgentGuardID.Decision expired,,) = guard.explainAuthorization(expiredId);
+        require(expired == AgentGuardID.Decision.EXPIRED, "expiry detail");
+        for (uint256 i = 0; i < 2; ++i) {
+            uint256 id = _request();
+            _approve(id);
+            vm.prank(AGENT);
+            app.recordTask(id, HASH);
+        }
+        uint256 blocked = _request();
+        _approve(blocked);
+        (AgentGuardID.Decision quota, uint256 used, uint256 limit) = guard.explainAuthorization(blocked);
+        require(quota == AgentGuardID.Decision.DAILY_LIMIT_REACHED && used == limit, "quota detail");
+    }
+
+    function testExplainStalePolicy() public {
+        uint256 id = _request();
+        _approve(id);
+        vm.prank(HUMAN);
+        guard.setPolicy(1, 1, true);
+        (AgentGuardID.Decision stale,,) = guard.explainAuthorization(id);
+        require(stale == AgentGuardID.Decision.POLICY_CHANGED, "policy revision detail");
+    }
+
     function testRotatedAgentCannotUseOldApproval() public {
         uint256 id = _request();
         _approve(id);

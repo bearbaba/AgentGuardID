@@ -14,6 +14,7 @@
     'function authorizations(uint256 authorizationId) view returns (uint256 workspaceId,address target,address agent,bytes32 payloadHash,uint64 expiresAt,uint8 status)',
     'function workspaces(uint256 workspaceId) view returns (address owner,address agent,uint32 dailyLimit,bool active)',
     'function allowedTargets(uint256 workspaceId,address target) view returns (bool)',
+    'function explainAuthorization(uint256 authorizationId) view returns (uint8 decision,uint256 used,uint256 limit)',
     'event WorkspaceCreated(uint256 indexed workspaceId,address indexed owner,address indexed agent,uint32 dailyLimit)',
     'event AuthorizationRequested(uint256 indexed authorizationId,uint256 indexed workspaceId,address indexed agent,address target,bytes32 payloadHash,uint64 expiresAt)',
     'event AuthorizationConsumed(uint256 indexed authorizationId,uint256 indexed workspaceId,address indexed agent,address target,bytes32 payloadHash)'
@@ -22,6 +23,15 @@
   const ID_ABI = ['function balanceOf(address owner) view returns (uint256)'];
   const el = id => document.getElementById(id);
   const statusNames = ['NONE', 'REQUESTED', 'APPROVED', 'CONSUMED', 'CANCELLED'];
+  const decisionNames = [
+    'READY — on-chain policy checks pass; target and payload still require validation at execution',
+    'UNKNOWN — authorization not found', 'BLOCKED — not approved or already consumed/cancelled',
+    'BLOCKED — authorization expired', 'BLOCKED — workspace paused',
+    'BLOCKED — assigned agent changed', 'BLOCKED — Agent ID missing',
+    'BLOCKED — target contract revoked', 'BLOCKED — policy changed after this request',
+    'BLOCKED — daily action quota reached'
+  ];
+  let verifiedReview = null;
   let provider = null, signer = null, wallet = null;
   const configured = !!(CFG.guardAddress && CFG.taskRegistryAddress &&
     window.ethers?.isAddress(CFG.guardAddress) && window.ethers?.isAddress(CFG.taskRegistryAddress));
@@ -44,6 +54,12 @@
     const value = el(inputId).value.trim();
     if (!/^[1-9][0-9]*$/.test(value)) throw Error('Enter a positive integer in ' + inputId);
     return BigInt(value);
+  }
+  function readGuard() {
+    requireConfigured();
+    return new window.ethers.Contract(
+      CFG.guardAddress, GUARD_ABI, new window.ethers.JsonRpcProvider(CFG.rpcUrl, CFG.chainId)
+    );
   }
   function guard() { requireConfigured(); return new window.ethers.Contract(CFG.guardAddress, GUARD_ABI, signer); }
   function target() { requireConfigured(); return new window.ethers.Contract(CFG.taskRegistryAddress, TASK_ABI, signer); }
@@ -185,23 +201,74 @@
     message('The task Keccak-256 hash is ' + hash + '. Copy your exact description for execution.');
     await send(() => guard().requestAuthorization(wid,CFG.taskRegistryAddress,hash,expiry),'AuthorizationRequested');
   });
-  hook('inspectAuthorization', async () => {
-    await ensureWallet(); requireConfigured();
+  const resetReview = () => {
+    verifiedReview = null;
+    el('approveAuthorization').disabled = true;
+    el('payloadVerification').textContent = 'Not verified. Compare the exact task description before approving.';
+  };
+  el('reviewDescription').addEventListener('input', resetReview);
+  el('approveId').addEventListener('input', resetReview);
+  async function inspectRequest() {
+    requireConfigured();
     const id = positiveInt('approveId');
-    const record = await guard().authorizations(id);
+    const reader = readGuard();
+    const record = await reader.authorizations(id);
     if (record.workspaceId === 0n) throw Error('Authorization ID does not exist.');
-    const w = await guard().workspaces(record.workspaceId);
+    const w = await reader.workspaces(record.workspaceId);
+    const [decision, used, limit] = await reader.explainAuthorization(id);
     el('authorizationDetails').textContent =
       'Workspace: ' + record.workspaceId + '\nOwner: ' + w.owner + '\nAgent: ' + record.agent +
       '\nTarget: ' + record.target + '\nPayload hash: ' + record.payloadHash +
       '\nExpires: ' + new Date(Number(record.expiresAt)*1000).toISOString() +
-      '\nStatus: ' + statusNames[Number(record.status)];
-    message('Authorization loaded directly from BNB Chain.', 'ok');
+      '\nStatus: ' + statusNames[Number(record.status)] +
+      '\nReadiness: ' + decisionNames[Number(decision)] + '\nDaily usage (UTC): ' + used + '/' + limit;
+    return { id, record, workspace: w };
+  }
+  hook('inspectAuthorization', async () => {
+    resetReview();
+    await inspectRequest();
+    message('Read-only authorization and decision explanation loaded. No wallet needed.', 'ok');
+  });
+  hook('verifyPayload', async () => {
+    resetReview();
+    if (!window.ethers) throw Error('Ethers.js is unavailable.');
+    const description = el('reviewDescription').value;
+    if (!description.trim()) throw Error('Paste the exact full task description provided by the agent.');
+    const {id, record, workspace} = await inspectRequest();
+    if (Number(record.status) !== 1) throw Error('Only a pending request can be approved.');
+    if (record.target.toLowerCase() !== CFG.taskRegistryAddress.toLowerCase()) {
+      throw Error('Request target differs from configured protected app.');
+    }
+    if (workspace.owner.toLowerCase() === record.agent.toLowerCase()) {
+      throw Error('Owner and agent must be separate addresses.');
+    }
+    const digest = window.ethers.keccak256(window.ethers.toUtf8Bytes(description));
+    if (digest.toLowerCase() !== record.payloadHash.toLowerCase()) {
+      el('payloadVerification').textContent = 'MISMATCH — supplied task text does not match on-chain payload hash.';
+      throw Error('Payload mismatch. Do not approve.');
+    }
+    verifiedReview = { id: id.toString(), hash: digest, text: description };
+    el('approveAuthorization').disabled = false;
+    el('payloadVerification').textContent = '✓ MATCH — exact description hashes to the on-chain request. Confirm the task and target before signing.';
+    message('Content and on-chain payload hash match. Owner wallet approval is still required.', 'ok');
   });
   hook('approveAuthorization', async () => {
     await ensureWallet(); requireConfigured();
     const id = positiveInt('approveId');
+    if (!verifiedReview || verifiedReview.id !== id.toString() ||
+        verifiedReview.text !== el('reviewDescription').value) {
+      throw Error('First verify the exact task description against this authorization hash.');
+    }
+    const record = await guard().authorizations(id);
+    const liveDigest = window.ethers.keccak256(window.ethers.toUtf8Bytes(el('reviewDescription').value));
+    if (Number(record.status) !== 1 || record.payloadHash.toLowerCase() !== liveDigest.toLowerCase()) {
+      resetReview();
+      throw Error('Authorization changed since verification. Inspect and verify again.');
+    }
+    const w = await guard().workspaces(record.workspaceId);
+    if (wallet.toLowerCase() !== w.owner.toLowerCase()) throw Error('Connect the separate human owner wallet to approve.');
     await send(() => guard().approveAuthorization(id));
+    resetReview();
   });
   hook('cancelAuthorization', async () => {
     await ensureWallet(); requireConfigured();
@@ -251,9 +318,9 @@
     message('Encoded protected target call. Review the preview and explicitly approve in Binance App.', 'ok');
   });
   hook('checkUsage', async () => {
-    await ensureWallet(); requireConfigured();
+    requireConfigured();
     const wid = positiveInt('usageWorkspaceId');
-    const [used, cap] = await guard().getTodayUsage(wid);
+    const [used, cap] = await readGuard().getTodayUsage(wid);
     el('dailyUsage').textContent = String(used) + ' / ' + String(cap);
     message('Daily usage read on-chain. Day boundaries follow UTC.', 'ok');
   });

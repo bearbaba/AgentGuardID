@@ -25,8 +25,14 @@ contract AgentGuardID {
     error DailyLimitReached();
     error PayloadMismatch();
     error UnauthorizedTarget();
+    error SeparationRequired();
 
     enum Status { NONE, REQUESTED, APPROVED, CONSUMED, CANCELLED }
+    /// @notice Read-only explanation; READY means policy conditions pass, not that a transaction is simulated.
+    enum Decision {
+        READY, UNKNOWN_ACTION, NOT_APPROVED, EXPIRED, WORKSPACE_DISABLED,
+        AGENT_CHANGED, ID_MISSING, TARGET_REVOKED, POLICY_CHANGED, DAILY_LIMIT_REACHED
+    }
 
     struct Workspace {
         address owner;
@@ -92,6 +98,7 @@ contract AgentGuardID {
 
     function createWorkspace(address agent, uint32 dailyLimit) external returns (uint256 id) {
         if (agent == address(0)) revert ZeroAddress();
+        if (agent == msg.sender) revert SeparationRequired();
         if (!hasAgentID(agent)) revert AgentIDRequired();
         if (dailyLimit == 0 || dailyLimit > 10000) revert InvalidPolicy();
 
@@ -102,6 +109,7 @@ contract AgentGuardID {
 
     function setAgent(uint256 workspaceId, address agent) external onlyOwner(workspaceId) {
         if (agent == address(0)) revert ZeroAddress();
+        if (agent == msg.sender) revert SeparationRequired();
         if (!hasAgentID(agent)) revert AgentIDRequired();
         address previous = workspaces[workspaceId].agent;
         if (previous != agent) {
@@ -200,6 +208,30 @@ contract AgentGuardID {
         a.status = Status.CONSUMED;
         dailyUsage[a.workspaceId][day] += 1;
         emit AuthorizationConsumed(authorizationId, a.workspaceId, agent, msg.sender, payloadHash);
+    }
+
+    /// @notice Explain current authorization readiness to a UI without submitting a transaction.
+    /// @dev This evaluates stored policy and ID ownership only; caller must still be the approved target,
+    ///      pass the correct agent and payload hash, and satisfy all conditions during execution.
+    function explainAuthorization(uint256 authorizationId)
+        external view returns (Decision decision, uint256 used, uint256 limit)
+    {
+        Authorization storage a = authorizations[authorizationId];
+        if (a.workspaceId == 0) return (Decision.UNKNOWN_ACTION, 0, 0);
+        Workspace storage w = workspaces[a.workspaceId];
+        used = dailyUsage[a.workspaceId][block.timestamp / 1 days];
+        limit = w.dailyLimit;
+        if (a.status != Status.APPROVED) return (Decision.NOT_APPROVED, used, limit);
+        if (block.timestamp > a.expiresAt) return (Decision.EXPIRED, used, limit);
+        if (!w.active) return (Decision.WORKSPACE_DISABLED, used, limit);
+        if (a.agent != w.agent) return (Decision.AGENT_CHANGED, used, limit);
+        if (!hasAgentID(a.agent)) return (Decision.ID_MISSING, used, limit);
+        if (!allowedTargets[a.workspaceId][a.target]) return (Decision.TARGET_REVOKED, used, limit);
+        if (authorizationRevision[authorizationId] != workspaceRevision[a.workspaceId]) {
+            return (Decision.POLICY_CHANGED, used, limit);
+        }
+        if (used >= limit) return (Decision.DAILY_LIMIT_REACHED, used, limit);
+        return (Decision.READY, used, limit);
     }
 
     function getTodayUsage(uint256 workspaceId) external view returns (uint256 used, uint256 limit) {

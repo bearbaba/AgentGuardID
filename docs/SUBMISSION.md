@@ -16,6 +16,8 @@ Deadline: **2026-12-09 08:00 UTC (15:00 Vietnam time)**. New and existing projec
 - [ ] Disclose limitations, user approvals, permissions and risk boundaries prominently.
 - [ ] Do not collect seeds, keys, pairing codes, API secrets; no third-party Binance Agentic Wallet QR sign-in.
 - [ ] Keep screenshots, a transaction walkthrough and public BscScan links as evidence.
+- [ ] Use the public on-chain Proof Center to inspect genuine request/consume events. Scan windows are capped at 3,000 blocks; consolidate unique Agent ID participants across ALL relevant windows independently before claiming any overall count.
+- [ ] Perform the frontend contract wiring check and manually compare public BscScan verified source code, compiler settings, constructor arguments, immutable registry and target addresses.
 
 ## Scoring priorities — Innovation Award
 

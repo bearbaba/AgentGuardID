@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#090e1b" />
+  <meta name="description" content="AgentGuard ID — guided BNB Chain mainnet contract deployment and verification." />
+  <title>Deploy contracts — AgentGuard ID</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="./deploy.css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/ethers@6.13.5/dist/ethers.umd.min.js"></script>
+  <script defer src="./deploy.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand" href="./index.html"><span class="brand-glyph">⬡</span><span>AgentGuard <em>ID</em></span></a>
+      <a href="./index.html" class="small-link">← Return to app</a>
+    </header>
+    <main class="deploy-main">
+      <div class="eyebrow">LIVE NETWORK · USER-SIGNED TRANSACTIONS</div>
+      <h1>Deploy on BNB Chain.<br><span>Keep control of every signature.</span></h1>
+      <p class="deploy-intro">This guided release checklist opens the exact audited-by-CI source in official Remix. You review and sign both contract creations in your own wallet. AgentGuard ID never requests or stores your private key, seed phrase, or wallet pairing code.</p>
+      <div class="deploy-notice">These transactions use real BNB for gas. Both contracts are still undeployed until a wallet signs and BNB Chain confirms the transactions. CI passing is not an external security audit.</div>
+      <div class="deploy-grid">
+        <section class="mini-card deployment-step">
+          <div class="card-kicker">01 · PREPARE</div>
+          <h2>Network and wallet</h2>
+          <p>Set your browser wallet to <strong>BNB Smart Chain Mainnet</strong> (chain ID <code>56</code> / <code>0x38</code>), with enough BNB for two contract creation transactions.</p>
+          <p>Use a separate human owner wallet and an Agent ID-bearing agent wallet for later use. Neither address is needed to deploy these two contracts.</p>
+          <div class="read-only-pill">No testnet · No private keys · No wallet connection to this page</div>
+        </section>
+        <section class="mini-card deployment-step">
+          <div class="card-kicker">02 · DEPLOY FIRST</div>
+          <h2>AgentGuardID</h2>
+          <p>Open the Solidity source in official Remix, compile with <strong>0.8.24</strong>, optimizer <strong>enabled, 200 runs</strong>. Select <strong>AgentGuardID</strong>, not IAgentID.</p>
+          <a class="deploy-cta" href="https://app.remix.live/#url=https://github.com/bearbaba/AgentGuardID/blob/main/contracts/AgentGuardID.sol" target="_blank" rel="noopener noreferrer">Open AgentGuardID in Remix ↗</a>
+          <label>Constructor: agentIdRegistry
+            <div class="copy-line"><code id="registryValue">0x60b9262456de011f7d15a54cdd8c48baaa8b022f</code><button id="copyRegistry" type="button" class="ghost-button">Copy</button></div>
+          </label>
+          <p>Environment: <strong>Browser Extension</strong> (connected wallet, chain 56), <strong>Value = 0</strong> BNB. Review gas and confirm. Paste the new contract address below.</p>
+          <label>Deployed AgentGuardID address
+            <input id="guardAddress" autocomplete="off" spellcheck="false" placeholder="0x…" />
+          </label>
+        </section>
+        <section class="mini-card deployment-step">
+          <div class="card-kicker">03 · DEPLOY SECOND</div>
+          <h2>ProtectedTaskRegistry</h2>
+          <p>Open the second Solidity source. Compile with the <strong>same 0.8.24 / optimizer 200</strong> settings. Select <strong>ProtectedTaskRegistry</strong>.</p>
+          <a class="deploy-cta" href="https://app.remix.live/#url=https://github.com/bearbaba/AgentGuardID/blob/main/contracts/ProtectedTaskRegistry.sol" target="_blank" rel="noopener noreferrer">Open ProtectedTaskRegistry in Remix ↗</a>
+          <label>Constructor: guardAddress
+            <div class="copy-line"><code id="guardConstructor">Paste the deployed guard address above</code><button id="copyGuard" type="button" class="ghost-button">Copy</button></div>
+          </label>
+          <p>Environment: <strong>Browser Extension</strong>, BNB mainnet, <strong>Value = 0</strong>. Confirm the second creation in your wallet.</p>
+          <label>Deployed ProtectedTaskRegistry address
+            <input id="targetAddress" autocomplete="off" spellcheck="false" placeholder="0x…" />
+          </label>
+        </section>
+        <section class="mini-card deployment-step">
+          <div class="card-kicker">04 · READ-ONLY VALIDATION</div>
+          <h2>Verify on-chain wiring</h2>
+          <p>This page only reads public chain data: verifies chain ID <code>56</code>, contract bytecode, Guard → official Agent ID registry and Target → your Guard. It cannot validate contract source verification or contract safety.</p>
+          <button id="verifyContracts" type="button" class="deploy-cta">Check deployed contracts (no gas)</button>
+          <div id="verificationStatus" class="verification-note" role="status" aria-live="polite">Enter both newly deployed addresses after confirming their transactions in your wallet.</div>
+          <div id="explorerLinks" class="evidence-links"></div>
+        </section>
+      </div>
+      <section class="mini-card deployment-complete">
+        <div class="card-kicker">05 · CONNECT WEBSITE AFTER VERIFICATION</div>
+        <h2>Publish verified addresses</h2>
+        <p>Only after the read-only check succeeds, a configuration snippet appears below. Copy it and share the <strong>two public contract addresses</strong> (not wallet secrets) here so we can update the live website. Independently verify both contract sources on BscScan before interacting with users.</p>
+        <pre id="configOutput" class="cli-output" aria-live="polite">Awaiting verified deployments. No mainnet contract addresses are configured yet.</pre>
+        <div class="deploy-actions">
+          <button type="button" id="copyConfig" class="ghost-button" disabled>Copy web/config.js</button>
+          <button type="button" id="copyForChat" class="ghost-button" disabled>Copy addresses for ChatGPT</button>
+        </div>
+        <p class="form-note">After source verification, create your first workspace from a <strong>human wallet</strong> and choose a <strong>different wallet holding Agent ID</strong> as the agent. Never enter private keys here.</p>
+        <a class="small-link" href="https://github.com/bearbaba/AgentGuardID/blob/main/docs/MAINNET_DEPLOYMENT.md" target="_blank" rel="noopener noreferrer">Detailed deployment and source verification checklist ↗</a>
+      </section>
+    </main>
+    <footer><span>© 2026 AgentGuard ID · Independent open-source hackathon project</span><span>No custody · No wallet signing on this page</span></footer>
+  </div>
+</body>
+</html>

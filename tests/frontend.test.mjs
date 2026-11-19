@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { spawnSync } from 'node:child_process';
 
 const html = fs.readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
 const code = fs.readFileSync(new URL('../web/app.js', import.meta.url), 'utf8');
@@ -35,4 +36,17 @@ assert.match(code, /AuthorizationConsumed/);
 assert.match(code, /to - from \+ 1 > 3000/);
 assert.match(html, /id="approveAuthorization"[^>]*disabled/);
 assert.doesNotMatch(html, /<form[^>]*action=["']https?:/);
+const deploymentHTML = fs.readFileSync(new URL('../web/deploy.html', import.meta.url), 'utf8');
+const deployJS = fs.readFileSync(new URL('../web/deploy.js', import.meta.url), 'utf8');
+for (const id of ['guardAddress','targetAddress','verifyContracts','verificationStatus','configOutput','copyConfig','copyForChat']) {
+  assert.match(deploymentHTML, new RegExp('id="' + id + '"'), 'missing deployment control ' + id);
+}
+assert.match(deployJS, /getCode\(CFG\.guardAddress\)/);
+assert.match(deployJS, /getCode\(CFG\.targetAddress\)/);
+assert.match(deployJS, /guard\.agentID\(\)/);
+assert.match(deployJS, /target\.guard\(\)/);
+assert.match(deployJS, /chainId !== 56n/);
+assert.doesNotMatch(deployJS, /eth_sendTransaction|eth_sendRawTransaction|eth_requestAccounts/);
+const check = spawnSync(process.execPath, ['--check', new URL('../web/deploy.js', import.meta.url).pathname], {encoding:'utf8'});
+assert.equal(check.status, 0, 'deployment JS syntax: ' + check.stderr);
 console.log('Frontend integrity checks: PASS');

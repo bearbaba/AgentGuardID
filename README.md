@@ -59,6 +59,10 @@ node --check web/app.js
 
 **Verification status:** GitHub Actions has successfully compiled the contracts and run Foundry tests on main, with a separate passing frontend check. See the repository Actions tab. A public CI pass does not replace an external security audit.
 
+## Mainnet deployment wizard (requires your wallet signature)
+
+Open **https://agentguardid.vercel.app/deploy** to use the guided Remix deployment checklist. No private keys, seed phrases, or GitHub Actions secrets are required. The page has a **read-only on-chain contract wiring validator** and prepares the exact addresses for updating web/config.js. It does not send transactions: you sign two deployments yourself in the official Remix IDE. See [docs/MAINNET_DEPLOYMENT.md](docs/MAINNET_DEPLOYMENT.md) for all required safety checks and BscScan verification steps.
+
 ## Deploy to BNB Chain mainnet (required by the contest)
 
 > Deployment and subsequent state-changing interactions cost BNB gas. There is no zero-gas claim. No secrets or private keys belong in this repository.

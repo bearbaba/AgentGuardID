@@ -126,6 +126,24 @@
   document.querySelectorAll('.tab').forEach(node => node.addEventListener('click', () => setTab(node.dataset.tab)));
   hook('getStarted', async () => { el('workspace').scrollIntoView({behavior:'smooth'}); setTab('overview'); });
   hook('connectButton', connect);
+  hook('checkIdentity', async () => {
+    if (!window.ethers) throw Error('Ethers.js is unavailable for the public checker.');
+    const address = validateAddress(el('identityAddress').value.trim(), 'Agent ID holder');
+    const result = el('identityCheckResult');
+    result.textContent = 'Reading official Agent ID ownership from BNB Chain…';
+    try {
+      const reader = new window.ethers.JsonRpcProvider(CFG.rpcUrl, CFG.chainId);
+      const registry = new window.ethers.Contract(CFG.officialAgentId, ID_ABI, reader);
+      const balance = await registry.balanceOf(address);
+      result.textContent = balance > 0n
+        ? '✓ Agent ID detected (' + String(balance) + ') for ' + address
+        : 'No Agent ID held by ' + address + ' at the latest readable block.';
+      message('Public Agent ID lookup completed. No wallet connection or gas required.', 'ok');
+    } catch (err) {
+      result.textContent = 'Unable to read the registry right now. Check the public RPC connection and try again.';
+      throw err;
+    }
+  });
   hook('createWorkspace', async () => {
     await ensureWallet(); requireConfigured();
     const agent = validateAddress(el('agentAddress').value.trim(),'Agent');

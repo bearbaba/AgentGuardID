@@ -4,7 +4,7 @@
 
 An independent BNB Chain hackathon prototype that uses Binance Wallet / SPACE ID **Agent ID** as an actual authorization condition, not merely a profile badge. The on-chain guard validates ownership of the non-transferable Agent ID NFT, enforces a human-owned allowlist and UTC daily action quotas, requires explicit approval, prevents replay, and emits an auditable history. An example `ProtectedTaskRegistry` shows how an application can refuse agent actions until the exact payload is approved.
 
-**Status:** source-code starter / locally runnable static UI. **Not yet deployed, verified on BscScan, independently audited, or submitted.** Never describe a preview as a live mainnet product.
+**Status:** [public static website](https://agentguardid.vercel.app) deployed on Vercel Hobby with GitHub CI passing. The **smart contracts are NOT yet deployed** on BNB Chain, verified on BscScan, independently audited, or submitted. UI is currently a read-only/prototype control panel; the public Agent ID eligibility checker works without connecting a wallet. Never describe the static website as a live mainnet contract integration.
 
 ## Project structure
 
@@ -57,7 +57,7 @@ node tests/frontend.test.mjs
 node --check web/app.js
 ```
 
-**Verification status:** Solidity compilation and Foundry execution must still be run; the authoring environment did not have Solidity/Foundry installed. GitHub CI is configured to perform those checks when you push.
+**Verification status:** GitHub Actions has successfully compiled the contracts and run Foundry tests on main, with a separate passing frontend check. See the repository Actions tab. A public CI pass does not replace an external security audit.
 
 ## Deploy to BNB Chain mainnet (required by the contest)
 
@@ -85,7 +85,7 @@ node --check web/app.js
 | Approve | Bound agent must still hold ID | Human owner |
 | Execute | Guard confirms same original Agent ID holder, target, hash, limits, status | Integrated target app |
 
-Changing the assigned agent, disabling the workspace, revoking a target, expiration, reaching a quota, or trying to reuse the approval stops the execution. The actual target contract **must** supply its authenticated `msg.sender` to the guard. A target that does not integrate the guard is not protected.
+Changing the assigned agent, disabling the workspace, revoking a target, expiration, reaching a quota, or trying to reuse the approval stops execution. **Any effective agent/policy/target permission change increments a workspace revision and permanently invalidates previously requested, unconsumed authorizations — even if the owner reverses that change.** The actual target contract **must** supply its authenticated `msg.sender` to the guard. A target that does not integrate the guard is not protected.
 
 ## Limits and ethics
 

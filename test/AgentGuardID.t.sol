@@ -128,6 +128,68 @@ contract AgentGuardIDTest {
         app.recordTask(id, HASH);
     }
 
+    function testRotationBackDoesNotResurrectApprovedAction() public {
+        uint256 id = _request();
+        _approve(id);
+        ids.mintForTest(STRANGER);
+        vm.prank(HUMAN);
+        guard.setAgent(1, STRANGER);
+        vm.prank(HUMAN);
+        guard.setAgent(1, AGENT);
+        vm.prank(AGENT);
+        vm.expectRevert(AgentGuardID.InvalidState.selector);
+        app.recordTask(id, HASH);
+        require(guard.workspaceRevision(1) == 3, "expected target setup + two rotations");
+    }
+
+    function testRevokingThenReallowingDoesNotResurrectApproval() public {
+        uint256 id = _request();
+        _approve(id);
+        vm.prank(HUMAN);
+        guard.setTarget(1, address(app), false);
+        vm.prank(HUMAN);
+        guard.setTarget(1, address(app), true);
+        vm.prank(AGENT);
+        vm.expectRevert(AgentGuardID.InvalidState.selector);
+        app.recordTask(id, HASH);
+    }
+
+    function testPauseAndResumeRequireFreshApproval() public {
+        uint256 id = _request();
+        _approve(id);
+        vm.prank(HUMAN);
+        guard.setPolicy(1, 2, false);
+        vm.prank(HUMAN);
+        guard.setPolicy(1, 2, true);
+        vm.prank(AGENT);
+        vm.expectRevert(AgentGuardID.InvalidState.selector);
+        app.recordTask(id, HASH);
+        uint256 freshId = _request();
+        _approve(freshId);
+        vm.prank(AGENT);
+        app.recordTask(freshId, HASH);
+        require(app.taskCount() == 1, "fresh policy action should work");
+    }
+
+    function testUnchangedPolicyKeepsApproval() public {
+        uint256 id = _request();
+        _approve(id);
+        vm.prank(HUMAN);
+        guard.setPolicy(1, 2, true);
+        vm.prank(AGENT);
+        app.recordTask(id, HASH);
+        require(app.taskCount() == 1, "noop should not invalidate");
+    }
+
+    function testPolicyChangeInvalidatesPendingRequestBeforeApproval() public {
+        uint256 id = _request();
+        vm.prank(HUMAN);
+        guard.setPolicy(1, 1, true);
+        vm.prank(HUMAN);
+        vm.expectRevert(AgentGuardID.InvalidState.selector);
+        guard.approveAuthorization(id);
+    }
+
     function testRotatedAgentCannotUseOldApproval() public {
         uint256 id = _request();
         _approve(id);

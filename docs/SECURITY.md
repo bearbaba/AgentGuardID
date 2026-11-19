@@ -10,6 +10,7 @@
 - The workspace owner must approve before the action can be consumed; approvals can be cancelled.
 - The *actual target application contract*, and not the agent, consumes the authorization. The target must authenticate its own `msg.sender` and pass that value as `agent`.
 - Exactly one successful consumption per authorization, with a UTC calendar-day quota. Revocation and disabling apply immediately to future consumptions.
+- Any effective change of assigned agent, enabled state, daily quota, or target allowance increments workspace revision and permanently invalidates all older outstanding approvals and requests. Reverting the configuration does not restore old permissions.
 - Every meaningful state transition emits a structured event.
 
 ## What it cannot enforce
@@ -25,7 +26,7 @@
 - There is no global admin, pause key, minting, owner withdrawal, or upgrade proxy.
 - Each workspace owner can rotate agent identity, allowlist/revoke app targets, change the limit, and disable the workspace.
 - Users should not create workspaces with an agent that they do not trust or that they cannot control.
-- Both the owner and agent can cancel requested/approved actions. A pre-approved action becomes invalid when the assigned agent changes, unless subsequently restored to the original agent.
+- Both the owner and agent can cancel requested/approved actions. Once any workspace configuration changes, prior outstanding authorizations remain invalid even after the original setting is restored.
 - If a workspace owner is also the agent, independent human approval is not guaranteed. Real users should use separate human and agent addresses.
 
 ## Before mainnet

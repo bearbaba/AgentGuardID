@@ -52,6 +52,9 @@ contract AgentGuardID {
     mapping(uint256 => Authorization) public authorizations;
     mapping(uint256 => mapping(address => bool)) public allowedTargets;
     mapping(uint256 => mapping(uint256 => uint256)) public dailyUsage; // workspaceId => UTC day => count
+    // Workspace changes invalidate ALL unconsumed authorizations, even after a change is reverted.
+    mapping(uint256 => uint256) public workspaceRevision;
+    mapping(uint256 => uint256) public authorizationRevision;
 
     event WorkspaceCreated(uint256 indexed workspaceId, address indexed owner, address indexed agent, uint32 dailyLimit);
     event AgentChanged(uint256 indexed workspaceId, address indexed previousAgent, address indexed newAgent);
@@ -61,6 +64,12 @@ contract AgentGuardID {
     event AuthorizationApproved(uint256 indexed authorizationId, address indexed owner);
     event AuthorizationCancelled(uint256 indexed authorizationId, address indexed actor);
     event AuthorizationConsumed(uint256 indexed authorizationId, uint256 indexed workspaceId, address indexed agent, address target, bytes32 payloadHash);
+    event WorkspaceRevisionAdvanced(uint256 indexed workspaceId, uint256 revision);
+
+    function _advanceRevision(uint256 workspaceId) internal {
+        uint256 revision = ++workspaceRevision[workspaceId];
+        emit WorkspaceRevisionAdvanced(workspaceId, revision);
+    }
 
     constructor(address agentIdRegistry) {
         if (agentIdRegistry == address(0)) revert ZeroAddress();
@@ -95,20 +104,26 @@ contract AgentGuardID {
         if (agent == address(0)) revert ZeroAddress();
         if (!hasAgentID(agent)) revert AgentIDRequired();
         address previous = workspaces[workspaceId].agent;
-        workspaces[workspaceId].agent = agent;
+        if (previous != agent) {
+            workspaces[workspaceId].agent = agent;
+            _advanceRevision(workspaceId);
+        }
         emit AgentChanged(workspaceId, previous, agent);
-        // Authorizations bind to their original agent, and become unusable after rotation.
+        // Even rotating back does NOT resurrect an earlier approval.
     }
 
     function setPolicy(uint256 workspaceId, uint32 dailyLimit, bool active) external onlyOwner(workspaceId) {
         if (dailyLimit == 0 || dailyLimit > 10000) revert InvalidPolicy();
-        workspaces[workspaceId].dailyLimit = dailyLimit;
-        workspaces[workspaceId].active = active;
+        Workspace storage w = workspaces[workspaceId];
+        if (w.dailyLimit != dailyLimit || w.active != active) _advanceRevision(workspaceId);
+        w.dailyLimit = dailyLimit;
+        w.active = active;
         emit WorkspacePolicyUpdated(workspaceId, dailyLimit, active);
     }
 
     function setTarget(uint256 workspaceId, address target, bool allowed) external onlyOwner(workspaceId) {
         if (target == address(0)) revert ZeroAddress();
+        if (allowedTargets[workspaceId][target] != allowed) _advanceRevision(workspaceId);
         allowedTargets[workspaceId][target] = allowed;
         emit TargetPermissionUpdated(workspaceId, target, allowed);
     }
@@ -133,6 +148,7 @@ contract AgentGuardID {
             expiresAt: expiresAt,
             status: Status.REQUESTED
         });
+        authorizationRevision[id] = workspaceRevision[workspaceId];
         emit AuthorizationRequested(id, workspaceId, msg.sender, target, payloadHash, expiresAt);
     }
 
@@ -147,6 +163,7 @@ contract AgentGuardID {
         if (!w.active) revert WorkspaceDisabled();
         if (!allowedTargets[a.workspaceId][a.target]) revert TargetNotAllowed();
         if (!hasAgentID(w.agent)) revert AgentIDRequired();
+        if (authorizationRevision[authorizationId] != workspaceRevision[a.workspaceId]) revert InvalidState();
         a.status = Status.APPROVED;
         emit AuthorizationApproved(authorizationId, msg.sender);
     }
@@ -174,6 +191,7 @@ contract AgentGuardID {
         if (msg.sender != a.target) revert UnauthorizedTarget();
         if (!allowedTargets[a.workspaceId][msg.sender]) revert TargetNotAllowed();
         if (a.payloadHash != payloadHash) revert PayloadMismatch();
+        if (authorizationRevision[authorizationId] != workspaceRevision[a.workspaceId]) revert InvalidState();
 
         uint256 day = block.timestamp / 1 days;
         if (dailyUsage[a.workspaceId][day] >= w.dailyLimit) revert DailyLimitReached();

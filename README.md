@@ -4,7 +4,7 @@
 
 An independent BNB Chain hackathon prototype that uses Binance Wallet / SPACE ID **Agent ID** as an actual authorization condition, not merely a profile badge. The on-chain guard validates ownership of the non-transferable Agent ID NFT, enforces a human-owned allowlist and UTC daily action quotas, requires explicit owner approval, rejects self-approval by the agent, prevents replay, and emits an auditable history. An example `ProtectedTaskRegistry` shows how an application can refuse agent actions until the exact payload is approved, then record separate immutable **intent** and **agent-reported result** hashes as a public task receipt. The on-chain `explainAuthorization` function makes current permission failures inspectable without gas.
 
-**Status:** [public static website](https://agentguardid.vercel.app) deployed on Vercel Hobby with GitHub CI passing. The **smart contracts are NOT yet deployed** on BNB Chain, verified on BscScan, independently audited, or submitted. UI is currently a read-only/prototype control panel; the public Agent ID eligibility checker works without connecting a wallet. The request inspector and live decision explainer work without a wallet after contract deployment; the approval button requires a verified exact-text/hash match and the separate owner wallet. Never describe the static website as a live mainnet contract integration.
+**Status:** [public static website](https://agentguardid.vercel.app) deployed on Vercel Hobby with GitHub CI passing. The **smart contracts are NOT yet deployed** on BNB Chain, verified on BscScan, independently audited, or submitted. UI is currently a read-only/prototype control panel; the public Agent ID eligibility checker works without connecting a wallet. Before transactions the website checks contract bytecode and links against the official Agent ID registry, though this is not a source-code audit. The Proof Center can scan bounded on-chain event windows and show observed unique requesters with public BscScan transaction links; it never fabricates a contest-wide count. The request inspector and live decision explainer work without a wallet after contract deployment; the approval button requires a verified exact-text/hash match and the separate owner wallet. Never describe the static website as a live mainnet contract integration.
 
 ## Project structure
 
@@ -69,7 +69,7 @@ node --check web/app.js
    `0x60b9262456de011f7d15a54cdd8c48baaa8b022f`
 4. Deploy `ProtectedTaskRegistry` with constructor argument equal to the newly deployed `AgentGuardID` address.
 5. **Verify and publish the exact source code of both contracts on BscScan.** Do not deploy `MockAgentID` on mainnet.
-6. Set `guardAddress` and `taskRegistryAddress` in `web/config.js`. Verify the addresses on BscScan yourself. Only then is the browser app configured for the actual contracts.
+6. Set `guardAddress` and `taskRegistryAddress` in `web/config.js`. Verify the addresses on BscScan yourself. On the website click **Verify contract wiring (read-only)** to check BNB chain ID, bytecode, guard→official Agent ID registry link, and target→guard link. This is necessary before write operations can proceed but does not prove source authenticity or establish a security audit.
 7. Publish `web/` as a static Vercel project (framework preset **Other**, root directory `web`; no build command or paid service needed). The CI workflow can build contracts independently.
 8. Use a **human owner wallet different from the Agent ID-holding wallet** to create a workspace specifying the **agent wallet** and a daily cap. The owner allowlists the actual `ProtectedTaskRegistry` address.
 9. Using the agent wallet, submit a task intent; share its **exact text** with the human owner via a channel you trust; using the human wallet, inspect the on-chain request, verify that text hashes to the on-chain digest, then approve it. Using the agent wallet, publish the protected task along with its **result summary hash**; the website can verify the result text against the on-chain receipt afterward. A second execution should revert on-chain. Each state change requires explicit wallet confirmation and gas.
@@ -102,6 +102,7 @@ Official rules: https://www.binance.com/en/support/announcement/detail/95f5dbe0e
 - Eligible Innovation entries require a **live** product with **at least 30 genuine Agent ID-holding addresses** interacting with submitted contracts during the window.
 - Contracts must be verified on BscScan; participants submit a site URL, contract addresses, source code and Agent ID usage description.
 - No artificial traffic, mass account creation, key collection, or unapproved automatic transactions.
+- The **Public Proof Center** scans at most 3,000 blocks per query in 500-block chunks. It reports unique `AuthorizationRequested` event agents only for that exact range, does not combine ranges, and is **not** Binance's eligibility determination. If a longer history is required, use a trusted indexer or independently export and deduplicate on-chain events.
 - Complete checklist and scorecard in `docs/SUBMISSION.md`.
 
 ### Submission description (English)

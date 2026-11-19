@@ -14,6 +14,8 @@
 - The read-only `explainAuthorization` returns a precise readiness reason based on the current chain state and does not consume gas; READY is not a promise of successful execution because target caller and calldata must still match.
 - The browser requires the human reviewer to paste exact task text and match its Keccak-256 hash against the on-chain request before it enables Approve. This is a **frontend guardrail**, not a cryptographic proof of human understanding or a protocol-wide enforcement rule. The text is not uploaded by the site.
 - Every accepted protected task records both the authorized intent hash and a separate non-empty result hash, linked to agent wallet, authorization ID and block timestamp. The result is a claim made by the agent, not external attestation.
+- Browser writes and generated Agentic Wallet CLI commands are gated by a fresh, explicit read-only check of BNB Chain ID 56, contract bytecode and guard/registry/target link consistency. This is a safety check, **not** a certificate of verified code or legitimacy. A malicious contract could mimic the two public getters; verify deployed bytecode/source on BscScan independently.
+- A bounded, read-only evidence query observes requested/consumed authorization logs; incomplete ranges must never be presented as a full participant count.
 - Every meaningful state transition emits a structured event.
 
 ## What it cannot enforce

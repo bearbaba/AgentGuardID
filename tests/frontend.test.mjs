@@ -7,9 +7,9 @@ const config = fs.readFileSync(new URL('../web/config.js', import.meta.url), 'ut
 
 for (const id of ['connectButton','createWorkspace','allowTarget','denyTarget','requestAuthorization',
   'inspectAuthorization','approveAuthorization','cancelAuthorization','executeTask','checkUsage',
-  'updatePolicy','rotateAgent','deploymentStatus','agentIdentity','checkIdentity','identityAddress','identityCheckResult','verifyPayload','reviewDescription','payloadVerification','executionResult','verifyReceipt','receiptTaskId','receiptResultText','receiptDetails']) {
+  'updatePolicy','rotateAgent','deploymentStatus','agentIdentity','checkIdentity','identityAddress','identityCheckResult','verifyPayload','reviewDescription','payloadVerification','executionResult','verifyReceipt','receiptTaskId','receiptResultText','receiptDetails','verifyWiring','wiringCheck','evidenceFromBlock','evidenceToBlock','scanParticipationEvidence','participationSummary','evidenceLinks']) {
   assert.match(html, new RegExp(`id="${id}"`), `missing UI control ${id}`);
-  if (!['deploymentStatus','agentIdentity','identityAddress','identityCheckResult','reviewDescription','payloadVerification','executionResult','receiptTaskId','receiptResultText','receiptDetails'].includes(id)) assert.match(code, new RegExp(`'${id}'`));
+  if (!['deploymentStatus','agentIdentity','identityAddress','identityCheckResult','reviewDescription','payloadVerification','executionResult','receiptTaskId','receiptResultText','receiptDetails','wiringCheck','evidenceFromBlock','evidenceToBlock','participationSummary','evidenceLinks'].includes(id)) assert.match(code, new RegExp(`'${id}'`));
 }
 assert.match(config, /0x60b9262456de011f7d15a54cdd8c48baaa8b022f/i);
 assert.match(config, /guardAddress:\s*''/);
@@ -27,6 +27,12 @@ assert.match(code, /verifiedReview/);
 assert.match(code, /readTarget\(\)/);
 assert.match(code, /resultHash/);
 assert.match(code, /hook\('verifyReceipt'/);
+assert.match(code, /hook\('verifyWiring'/);
+assert.match(code, /requireWiringVerified\(\)/);
+assert.match(code, /function scanParticipationEvidence\(\)/);
+assert.match(code, /AuthorizationRequested/);
+assert.match(code, /AuthorizationConsumed/);
+assert.match(code, /to - from \+ 1 > 3000/);
 assert.match(html, /id="approveAuthorization"[^>]*disabled/);
 assert.doesNotMatch(html, /<form[^>]*action=["']https?:/);
 console.log('Frontend integrity checks: PASS');

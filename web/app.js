@@ -14,6 +14,7 @@
     'function authorizations(uint256 authorizationId) view returns (uint256 workspaceId,address target,address agent,bytes32 payloadHash,uint64 expiresAt,uint8 status)',
     'function workspaces(uint256 workspaceId) view returns (address owner,address agent,uint32 dailyLimit,bool active)',
     'function allowedTargets(uint256 workspaceId,address target) view returns (bool)',
+    'function agentID() view returns (address)',
     'function explainAuthorization(uint256 authorizationId) view returns (uint8 decision,uint256 used,uint256 limit)',
     'event WorkspaceCreated(uint256 indexed workspaceId,address indexed owner,address indexed agent,uint32 dailyLimit)',
     'event AuthorizationRequested(uint256 indexed authorizationId,uint256 indexed workspaceId,address indexed agent,address target,bytes32 payloadHash,uint64 expiresAt)',
@@ -22,6 +23,7 @@
   const TASK_ABI = [
     'function recordTask(uint256 authorizationId,bytes32 contentHash,bytes32 resultHash) returns (uint256)',
     'function taskCount() view returns (uint256)',
+    'function guard() view returns (address)',
     'function tasks(uint256 taskId) view returns (address agent,bytes32 contentHash,bytes32 resultHash,uint64 timestamp,uint256 authorizationId)'
   ];
   const ID_ABI = ['function balanceOf(address owner) view returns (uint256)'];
@@ -37,6 +39,8 @@
   ];
   let verifiedReview = null;
   let provider = null, signer = null, wallet = null;
+  // Wallet writes remain blocked until the configured mainnet addresses pass a read-only integrity check.
+  let deployedLinksVerified = false;
   const configured = !!(CFG.guardAddress && CFG.taskRegistryAddress &&
     window.ethers?.isAddress(CFG.guardAddress) && window.ethers?.isAddress(CFG.taskRegistryAddress));
 
@@ -66,6 +70,45 @@
     );
   }
   function guard() { requireConfigured(); return new window.ethers.Contract(CFG.guardAddress, GUARD_ABI, signer); }
+  async function verifyContractWiring() {
+    if (!window.ethers) throw Error('Ethers.js is unavailable.');
+    requireConfigured();
+    deployedLinksVerified = false;
+    const check = el('wiringCheck');
+    check.textContent = 'Checking network, contract bytecode and immutable protocol links…';
+    const rpc = new window.ethers.JsonRpcProvider(CFG.rpcUrl);
+    try {
+      const net = await rpc.getNetwork();
+      if (net.chainId !== 56n) throw Error('Configured RPC is not BNB Chain mainnet (chain ID 56).');
+      const [idCode, guardCode, targetCode] = await Promise.all([
+        rpc.getCode(CFG.officialAgentId), rpc.getCode(CFG.guardAddress),
+        rpc.getCode(CFG.taskRegistryAddress)
+      ]);
+      if ([idCode,guardCode,targetCode].some(code => code === '0x')) {
+        throw Error('Missing bytecode at an Agent ID, guard or target contract address.');
+      }
+      const g = new window.ethers.Contract(CFG.guardAddress, GUARD_ABI, rpc);
+      const target = new window.ethers.Contract(CFG.taskRegistryAddress, TASK_ABI, rpc);
+      const [linkedIdentity, linkedGuard] = await Promise.all([g.agentID(), target.guard()]);
+      if (linkedIdentity.toLowerCase() !== CFG.officialAgentId.toLowerCase()) {
+        throw Error('Guard is NOT linked to the official Agent ID registry.');
+      }
+      if (linkedGuard.toLowerCase() !== CFG.guardAddress.toLowerCase()) {
+        throw Error('Protected target is NOT linked to the configured guard.');
+      }
+      deployedLinksVerified = true;
+      check.textContent = '✓ Verified BNB mainnet bytecode and registry/target links. Source verification and independent audit still required.';
+      message('Configured contracts passed on-chain wiring checks. Always inspect transaction details before signing.', 'ok');
+      return rpc;
+    } catch(err) {
+      check.textContent = 'Unverified — ' + (err?.shortMessage || err?.message || 'network query failed');
+      throw err;
+    }
+  }
+  hook('verifyWiring', verifyContractWiring);
+  function requireWiringVerified() {
+    if (!deployedLinksVerified) throw Error('Read-only contract wiring check required before sending transactions.');
+  }
   function target() { requireConfigured(); return new window.ethers.Contract(CFG.taskRegistryAddress, TASK_ABI, signer); }
   function readTarget() {
     requireConfigured();
@@ -122,6 +165,7 @@
     } catch (err) { fail(err); }
   }
   async function send(call, eventName) {
+    requireWiringVerified();
     await ensureWallet();
     message('Review and confirm this transaction in your wallet. No transaction is sent automatically.');
     const tx = await call();
@@ -318,6 +362,7 @@
     message(match ? 'Result receipt verified against its on-chain hash.' : 'Task receipt read without wallet connection.', match ? 'ok' : '');
   });
   function cliCommand(from, to, calldata) {
+    requireWiringVerified();
     return 'baw contract-call preview --binanceChainId 56 --from ' + from +
       ' --to ' + to + ' --value 0 --inputData ' + calldata + ' --json' +
       '\n\nAfter preview returns a requestId, inspect it and confirm in the Binance App, then run:' +
@@ -361,12 +406,71 @@
     el('dailyUsage').textContent = String(used) + ' / ' + String(cap);
     message('Daily usage read on-chain. Day boundaries follow UTC.', 'ok');
   });
+
+  async function scanParticipationEvidence() {
+    if (!window.ethers) throw Error('Ethers.js unavailable.');
+    // Always attest addresses before counting logs: never count unverified contract configuration.
+    const rpc = await verifyContractWiring();
+    const latest = await rpc.getBlockNumber();
+    const inputFrom = el('evidenceFromBlock').value.trim();
+    const inputTo = el('evidenceToBlock').value.trim();
+    const decimal = /^[0-9]+$/;
+    if ((inputFrom && !decimal.test(inputFrom)) || (inputTo && !decimal.test(inputTo))) {
+      throw Error('Enter decimal block numbers only.');
+    }
+    const to = inputTo ? Number(inputTo) : latest;
+    const from = inputFrom ? Number(inputFrom) : Math.max(0, to - 1999);
+    if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to) ||
+        from < 0 || to < from || to > latest || to - from + 1 > 3000) {
+      throw Error('Select up to 3,000 confirmed BNB Chain blocks within the current chain height.');
+    }
+    const events = new window.ethers.Contract(CFG.guardAddress, GUARD_ABI, rpc);
+    const uniqueAgents = new Set(), requestIds = new Set(), consumptionIds = new Set();
+    const proofTransactions = [];
+    const status = el('participationSummary');
+    const links = el('evidenceLinks');
+    links.replaceChildren();
+    status.textContent = 'Scanning BNB blocks ' + from + '–' + to + '…';
+    for (let start = from; start <= to; start += 500) {
+      const finish = Math.min(to, start + 499);
+      const requests = await events.queryFilter(events.filters.AuthorizationRequested(), start, finish);
+      const consumptions = await events.queryFilter(events.filters.AuthorizationConsumed(), start, finish);
+      for (const log of requests) {
+        uniqueAgents.add(log.args.agent.toLowerCase());
+        requestIds.add(log.transactionHash + ':' + log.index);
+        if (proofTransactions.length < 6) proofTransactions.push(log.transactionHash);
+      }
+      for (const log of consumptions) {
+        consumptionIds.add(log.transactionHash + ':' + log.index);
+        if (proofTransactions.length < 6) proofTransactions.push(log.transactionHash);
+      }
+      status.textContent = 'Scanned ' + finish + ' / ' + to + ' · reading public chain events…';
+    }
+    status.textContent =
+      'Observed in blocks ' + from + '–' + to + ': ' + uniqueAgents.size +
+      ' unique Agent ID wallets requesting actions, ' + requestIds.size +
+      ' requests, and ' + consumptionIds.size +
+      ' consumed approvals. This is a bounded event sample, NOT an official hackathon eligibility count.';
+    const shown = [...new Set(proofTransactions)];
+    for (const hash of shown) {
+      const a = document.createElement('a');
+      a.href = CFG.explorer + '/tx/' + hash;
+      a.rel = 'noopener noreferrer';
+      a.target = '_blank';
+      a.textContent = 'View on-chain tx ' + hash.slice(0,10) + '…';
+      a.className = 'small-link';
+      links.appendChild(a);
+    }
+    if (!shown.length) links.textContent = 'No matching AgentGuard authorization events in the selected block range.';
+    message('On-chain evidence scan completed; counts cover only the displayed block range.', 'ok');
+  }
+  hook('scanParticipationEvidence', scanParticipationEvidence);
   if (configured) {
-    el('deploymentStatus').textContent = 'Mainnet addresses configured';
-    el('deploymentStatus').className = 'status-chip success';
+    el('deploymentStatus').textContent = 'Addresses set · verification pending';
+    el('deploymentStatus').className = 'status-chip warning';
     el('guardStatus').textContent = CFG.guardAddress;
     el('guardDot').className = 'dot verified';
-    el('guardDescription').textContent = 'Check BscScan for source verification and deployment history.';
+    el('guardDescription').textContent = 'Verify on-chain wiring before transactions. Then inspect BscScan source verification separately.';
     el('targetAddress').value = CFG.taskRegistryAddress;
     el('guardExplorer').href = CFG.explorer+'/address/'+CFG.guardAddress+'#events';
   }

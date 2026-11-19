@@ -19,6 +19,7 @@ contract AgentGuardIDTest {
     address internal constant AGENT = address(0xB0B);
     address internal constant STRANGER = address(0xDEAD);
     bytes32 internal constant HASH = keccak256("Summarize daily on-chain risk reports");
+    bytes32 internal constant RESULT_HASH = keccak256("Daily monitoring report: 2 policy exceptions");
 
     MockAgentID internal ids;
     AgentGuardID internal guard;
@@ -45,25 +46,46 @@ contract AgentGuardIDTest {
         guard.approveAuthorization(id);
     }
 
+    function testReceiptCommitsIntentAndResult() public {
+        uint256 id = _request();
+        _approve(id);
+        vm.prank(AGENT);
+        app.recordTask(id, HASH, RESULT_HASH);
+        (address recordedAgent, bytes32 intent, bytes32 result, uint64 timestamp, uint256 linkedId) = app.tasks(0);
+        require(recordedAgent == AGENT, "agent provenance");
+        require(intent == HASH && result == RESULT_HASH, "hash commitments");
+        require(timestamp == uint64(block.timestamp) && linkedId == id, "linked authorization");
+    }
+
+    function testEmptyResultCannotConsumeApproval() public {
+        uint256 id = _request();
+        _approve(id);
+        vm.prank(AGENT);
+        vm.expectRevert(bytes("empty result hash"));
+        app.recordTask(id, HASH, bytes32(0));
+        (AgentGuardID.Decision ready,,) = guard.explainAuthorization(id);
+        require(ready == AgentGuardID.Decision.READY, "rejected receipt must not consume approval");
+    }
+
     function testApprovedActionExecutesOnce() public {
         uint256 id = _request();
         _approve(id);
         vm.prank(AGENT);
-        uint256 taskId = app.recordTask(id, HASH);
+        uint256 taskId = app.recordTask(id, HASH, RESULT_HASH);
         require(taskId == 0, "first task should be zero");
         require(app.taskCount() == 1, "task not recorded");
         (uint256 used, uint256 limit) = guard.getTodayUsage(1);
         require(used == 1 && limit == 2, "usage mismatch");
         vm.prank(AGENT);
         vm.expectRevert(AgentGuardID.InvalidState.selector);
-        app.recordTask(id, HASH);
+        app.recordTask(id, HASH, RESULT_HASH);
     }
 
     function testUnapprovedActionCannotExecute() public {
         uint256 id = _request();
         vm.prank(AGENT);
         vm.expectRevert(AgentGuardID.InvalidState.selector);
-        app.recordTask(id, HASH);
+        app.recordTask(id, HASH, RESULT_HASH);
     }
 
     function testAttackerCannotStealApproval() public {
@@ -71,7 +93,7 @@ contract AgentGuardIDTest {
         _approve(id);
         vm.prank(STRANGER);
         vm.expectRevert(AgentGuardID.AgentIDRequired.selector);
-        app.recordTask(id, HASH);
+        app.recordTask(id, HASH, RESULT_HASH);
     }
 
     function testPayloadIsBound() public {
@@ -79,7 +101,7 @@ contract AgentGuardIDTest {
         _approve(id);
         vm.prank(AGENT);
         vm.expectRevert(AgentGuardID.PayloadMismatch.selector);
-        app.recordTask(id, keccak256("different"));
+        app.recordTask(id, keccak256("different"), RESULT_HASH);
     }
 
     function testDailyCap() public {
@@ -87,13 +109,13 @@ contract AgentGuardIDTest {
             uint256 id = _request();
             _approve(id);
             vm.prank(AGENT);
-            app.recordTask(id, HASH);
+            app.recordTask(id, HASH, RESULT_HASH);
         }
         uint256 third = _request();
         _approve(third);
         vm.prank(AGENT);
         vm.expectRevert(AgentGuardID.DailyLimitReached.selector);
-        app.recordTask(third, HASH);
+        app.recordTask(third, HASH, RESULT_HASH);
     }
 
     function testExpiredApprovalFails() public {
@@ -102,7 +124,7 @@ contract AgentGuardIDTest {
         vm.warp(block.timestamp + 1 days + 1);
         vm.prank(AGENT);
         vm.expectRevert(AgentGuardID.Expired.selector);
-        app.recordTask(id, HASH);
+        app.recordTask(id, HASH, RESULT_HASH);
     }
 
     function testOnlyOwnerCanApprove() public {
@@ -125,7 +147,7 @@ contract AgentGuardIDTest {
         guard.setTarget(1, address(app), false);
         vm.prank(AGENT);
         vm.expectRevert(AgentGuardID.TargetNotAllowed.selector);
-        app.recordTask(id, HASH);
+        app.recordTask(id, HASH, RESULT_HASH);
     }
 
     function testRotationBackDoesNotResurrectApprovedAction() public {
@@ -138,7 +160,7 @@ contract AgentGuardIDTest {
         guard.setAgent(1, AGENT);
         vm.prank(AGENT);
         vm.expectRevert(AgentGuardID.InvalidState.selector);
-        app.recordTask(id, HASH);
+        app.recordTask(id, HASH, RESULT_HASH);
         require(guard.workspaceRevision(1) == 3, "expected target setup + two rotations");
     }
 
@@ -151,7 +173,7 @@ contract AgentGuardIDTest {
         guard.setTarget(1, address(app), true);
         vm.prank(AGENT);
         vm.expectRevert(AgentGuardID.InvalidState.selector);
-        app.recordTask(id, HASH);
+        app.recordTask(id, HASH, RESULT_HASH);
     }
 
     function testPauseAndResumeRequireFreshApproval() public {
@@ -163,11 +185,11 @@ contract AgentGuardIDTest {
         guard.setPolicy(1, 2, true);
         vm.prank(AGENT);
         vm.expectRevert(AgentGuardID.InvalidState.selector);
-        app.recordTask(id, HASH);
+        app.recordTask(id, HASH, RESULT_HASH);
         uint256 freshId = _request();
         _approve(freshId);
         vm.prank(AGENT);
-        app.recordTask(freshId, HASH);
+        app.recordTask(freshId, HASH, RESULT_HASH);
         require(app.taskCount() == 1, "fresh policy action should work");
     }
 
@@ -177,7 +199,7 @@ contract AgentGuardIDTest {
         vm.prank(HUMAN);
         guard.setPolicy(1, 2, true);
         vm.prank(AGENT);
-        app.recordTask(id, HASH);
+        app.recordTask(id, HASH, RESULT_HASH);
         require(app.taskCount() == 1, "noop should not invalidate");
     }
 
@@ -208,7 +230,7 @@ contract AgentGuardIDTest {
         (AgentGuardID.Decision ready,,) = guard.explainAuthorization(id);
         require(ready == AgentGuardID.Decision.READY, "approval ready");
         vm.prank(AGENT);
-        app.recordTask(id, HASH);
+        app.recordTask(id, HASH, RESULT_HASH);
         (AgentGuardID.Decision consumed,,) = guard.explainAuthorization(id);
         require(consumed == AgentGuardID.Decision.NOT_APPROVED, "consumed not ready");
     }
@@ -234,7 +256,7 @@ contract AgentGuardIDTest {
             uint256 id = _request();
             _approve(id);
             vm.prank(AGENT);
-            app.recordTask(id, HASH);
+            app.recordTask(id, HASH, RESULT_HASH);
         }
         uint256 blocked = _request();
         _approve(blocked);
@@ -259,6 +281,6 @@ contract AgentGuardIDTest {
         guard.setAgent(1, STRANGER);
         vm.prank(AGENT);
         vm.expectRevert(AgentGuardID.AgentIDRequired.selector);
-        app.recordTask(id, HASH);
+        app.recordTask(id, HASH, RESULT_HASH);
     }
 }

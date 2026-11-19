@@ -13,12 +13,14 @@
 - Any effective change of assigned agent, enabled state, daily quota, or target allowance increments workspace revision and permanently invalidates all older outstanding approvals and requests. Reverting the configuration does not restore old permissions.
 - The read-only `explainAuthorization` returns a precise readiness reason based on the current chain state and does not consume gas; READY is not a promise of successful execution because target caller and calldata must still match.
 - The browser requires the human reviewer to paste exact task text and match its Keccak-256 hash against the on-chain request before it enables Approve. This is a **frontend guardrail**, not a cryptographic proof of human understanding or a protocol-wide enforcement rule. The text is not uploaded by the site.
+- Every accepted protected task records both the authorized intent hash and a separate non-empty result hash, linked to agent wallet, authorization ID and block timestamp. The result is a claim made by the agent, not external attestation.
 - Every meaningful state transition emits a structured event.
 
 ## What it cannot enforce
 
 - It does not restrict arbitrary transactions from an external Agentic Wallet. A malicious agent can bypass it by calling an unrelated contract directly unless that target integrates the gate.
 - The contract cannot validate human understanding of task content or check off-chain behavior. The browser's text-hash matching only proves byte equality with a digest, not that the task is safe or that agents performed the claimed work. Predictable short task descriptions can be guessed from their public hash.
+- Result receipt hashes commit to supplied bytes only; they do not certify that an AI report is correct, executed, or free of omissions. Task text/result text never goes on-chain directly; predictable plaintext can sometimes be guessed from hashes.
 - It does not enforce USD spending limits or token movements. The example protected target stores task hashes only.
 - Agent ID ownership proves possession of a non-transferable on-chain credential, not a human's legal identity or trustworthiness.
 - The browser uses an injected EVM wallet; official Agentic Wallet custom contract calls may require opt-in Developer Mode and human confirmation. **Do not implement third-party QR sign-in/pairing.**

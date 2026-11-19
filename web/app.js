@@ -19,7 +19,11 @@
     'event AuthorizationRequested(uint256 indexed authorizationId,uint256 indexed workspaceId,address indexed agent,address target,bytes32 payloadHash,uint64 expiresAt)',
     'event AuthorizationConsumed(uint256 indexed authorizationId,uint256 indexed workspaceId,address indexed agent,address target,bytes32 payloadHash)'
   ];
-  const TASK_ABI = ['function recordTask(uint256 authorizationId,bytes32 contentHash) returns (uint256)','function taskCount() view returns (uint256)'];
+  const TASK_ABI = [
+    'function recordTask(uint256 authorizationId,bytes32 contentHash,bytes32 resultHash) returns (uint256)',
+    'function taskCount() view returns (uint256)',
+    'function tasks(uint256 taskId) view returns (address agent,bytes32 contentHash,bytes32 resultHash,uint64 timestamp,uint256 authorizationId)'
+  ];
   const ID_ABI = ['function balanceOf(address owner) view returns (uint256)'];
   const el = id => document.getElementById(id);
   const statusNames = ['NONE', 'REQUESTED', 'APPROVED', 'CONSUMED', 'CANCELLED'];
@@ -63,6 +67,12 @@
   }
   function guard() { requireConfigured(); return new window.ethers.Contract(CFG.guardAddress, GUARD_ABI, signer); }
   function target() { requireConfigured(); return new window.ethers.Contract(CFG.taskRegistryAddress, TASK_ABI, signer); }
+  function readTarget() {
+    requireConfigured();
+    return new window.ethers.Contract(
+      CFG.taskRegistryAddress, TASK_ABI, new window.ethers.JsonRpcProvider(CFG.rpcUrl, CFG.chainId)
+    );
+  }
   async function ensureWallet() {
     if (!window.ethers) throw Error('The ethers library was not loaded. Check your internet connection or host a pinned local copy.');
     if (!window.ethereum) throw Error('No injected EVM wallet found. Open with a supported wallet browser.');
@@ -91,7 +101,7 @@
     wallet = await signer.getAddress();
     el('walletAddress').textContent = wallet;
     el('connectButton').textContent = wallet.slice(0, 6) + '…' + wallet.slice(-4);
-    if (!el('agentAddress').value) el('agentAddress').value = wallet;
+    // The owner and agent must be separate addresses. Never auto-assign the owner as agent.
     await refreshIdentity();
   }
   async function refreshIdentity() {
@@ -279,9 +289,33 @@
     await ensureWallet(); requireConfigured();
     const id = positiveInt('executeId');
     const description = el('executionDescription').value.trim();
+    const result = el('executionResult').value.trim();
     if (!description) throw Error('Enter the exact description used when requesting approval.');
+    if (!result) throw Error('Enter a non-empty result summary to commit as a receipt.');
     const hash = window.ethers.keccak256(window.ethers.toUtf8Bytes(description));
-    await send(() => target().recordTask(id,hash));
+    const resultHash = window.ethers.keccak256(window.ethers.toUtf8Bytes(result));
+    await send(() => target().recordTask(id,hash,resultHash));
+  });
+  hook('verifyReceipt', async () => {
+    if (!window.ethers) throw Error('Ethers.js unavailable.');
+    const taskIdText = el('receiptTaskId').value.trim();
+    if (!/^(0|[1-9][0-9]*)$/.test(taskIdText)) throw Error('Enter a nonnegative task ID.');
+    const taskId = BigInt(taskIdText);
+    const registry = readTarget();
+    const count = await registry.taskCount();
+    if (taskId >= count) throw Error('Task receipt not found on-chain.');
+    const task = await registry.tasks(taskId);
+    const result = el('receiptResultText').value.trim();
+    const computedHash = result ? window.ethers.keccak256(window.ethers.toUtf8Bytes(result)) : null;
+    const match = computedHash && computedHash.toLowerCase() === task.resultHash.toLowerCase();
+    el('receiptDetails').textContent =
+      'Task #' + taskId + '\nAgent: ' + task.agent + '\nAuthorization: ' + task.authorizationId +
+      '\nIntent hash: ' + task.contentHash + '\nResult hash: ' + task.resultHash +
+      '\nRecorded: ' + new Date(Number(task.timestamp)*1000).toISOString() +
+      '\nResult check: ' + (result ? (match ? 'MATCH — exact result text matches the stored hash'
+        : 'MISMATCH — provided result differs from the stored commitment') : 'No result text supplied; commitment only') +
+      '\nImportant: A matching hash does not prove the agent report is true.';
+    message(match ? 'Result receipt verified against its on-chain hash.' : 'Task receipt read without wallet connection.', match ? 'ok' : '');
   });
   function cliCommand(from, to, calldata) {
     return 'baw contract-call preview --binanceChainId 56 --from ' + from +
@@ -312,8 +346,11 @@
     const id = positiveInt('executeId');
     const description = el('executionDescription').value.trim();
     if (!description) throw Error('Enter the exact description approved for execution.');
+    const result = el('executionResult').value.trim();
+    if (!result) throw Error('Enter the result summary in the execution form.');
     const hash = window.ethers.keccak256(window.ethers.toUtf8Bytes(description));
-    const data = new window.ethers.Interface(TASK_ABI).encodeFunctionData('recordTask',[id,hash]);
+    const resultHash = window.ethers.keccak256(window.ethers.toUtf8Bytes(result));
+    const data = new window.ethers.Interface(TASK_ABI).encodeFunctionData('recordTask',[id,hash,resultHash]);
     el('cliExecuteOutput').textContent = cliCommand(from, CFG.taskRegistryAddress, data);
     message('Encoded protected target call. Review the preview and explicitly approve in Binance App.', 'ok');
   });

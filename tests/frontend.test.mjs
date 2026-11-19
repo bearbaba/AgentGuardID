@@ -7,9 +7,9 @@ const config = fs.readFileSync(new URL('../web/config.js', import.meta.url), 'ut
 
 for (const id of ['connectButton','createWorkspace','allowTarget','denyTarget','requestAuthorization',
   'inspectAuthorization','approveAuthorization','cancelAuthorization','executeTask','checkUsage',
-  'updatePolicy','rotateAgent','deploymentStatus','agentIdentity','checkIdentity','identityAddress','identityCheckResult']) {
+  'updatePolicy','rotateAgent','deploymentStatus','agentIdentity','checkIdentity','identityAddress','identityCheckResult','verifyPayload','reviewDescription','payloadVerification']) {
   assert.match(html, new RegExp(`id="${id}"`), `missing UI control ${id}`);
-  if (!['deploymentStatus','agentIdentity','identityAddress','identityCheckResult'].includes(id)) assert.match(code, new RegExp(`'${id}'`));
+  if (!['deploymentStatus','agentIdentity','identityAddress','identityCheckResult','reviewDescription','payloadVerification'].includes(id)) assert.match(code, new RegExp(`'${id}'`));
 }
 assert.match(config, /0x60b9262456de011f7d15a54cdd8c48baaa8b022f/i);
 assert.match(config, /guardAddress:\s*''/);
@@ -21,5 +21,9 @@ assert.match(code, /approveAuthorization/);
 assert.match(code, /recordTask/);
 assert.match(code, /JsonRpcProvider\(CFG\.rpcUrl, CFG\.chainId\)/);
 assert.match(code, /hook\('checkIdentity'/);
+assert.match(code, /hook\('verifyPayload'/);
+assert.match(code, /explainAuthorization/);
+assert.match(code, /verifiedReview/);
+assert.match(html, /id="approveAuthorization"[^>]*disabled/);
 assert.doesNotMatch(html, /<form[^>]*action=["']https?:/);
 console.log('Frontend integrity checks: PASS');

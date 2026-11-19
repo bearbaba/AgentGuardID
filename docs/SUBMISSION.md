@@ -8,8 +8,8 @@ Deadline: **2026-12-09 08:00 UTC (15:00 Vietnam time)**. New and existing projec
 - [ ] Verify both contract sources publicly on BscScan; publish code on GitHub.
 - [ ] Make the website live and ensure users can complete end-to-end operations.
 - [ ] Use the official Agent ID registry on mainnet, not `MockAgentID`.
-- [ ] Demonstrate actual `balanceOf` checks, authorized approval and successful protected target action.
-- [ ] Test different wallet addresses (a human controller and an Agent ID holder).
+- [ ] Demonstrate actual `balanceOf` checks, exact-text/hash review, human authorization, live decision explanation and successful protected target action.
+- [ ] Test different wallet addresses (a human controller and an Agent ID holder); demonstrate rejection of same-wallet workspace and stale-policy approvals.
 - [ ] Recruit **at least 30 distinct real Agent ID holder addresses** to interact with submitted contract addresses during the submission window. Do not fake, sybil, or manipulate interaction counts.
 - [ ] Submit project name, website, verified contract addresses, project GitHub URL, and description of core Agent ID usage using the official announcement's **Submit Project Now** link.
 - [ ] Provide a 60–90 second original demo with hashes, verification, approval, and single-use execution.

@@ -2,9 +2,9 @@
 
 **AI Agents propose. Humans authorize. Apps enforce.**
 
-An independent BNB Chain hackathon prototype that uses Binance Wallet / SPACE ID **Agent ID** as an actual authorization condition, not merely a profile badge. The on-chain guard validates ownership of the non-transferable Agent ID NFT, enforces a human-owned allowlist and UTC daily action quotas, requires explicit approval, prevents replay, and emits an auditable history. An example `ProtectedTaskRegistry` shows how an application can refuse agent actions until the exact payload is approved.
+An independent BNB Chain hackathon prototype that uses Binance Wallet / SPACE ID **Agent ID** as an actual authorization condition, not merely a profile badge. The on-chain guard validates ownership of the non-transferable Agent ID NFT, enforces a human-owned allowlist and UTC daily action quotas, requires explicit owner approval, rejects self-approval by the agent, prevents replay, and emits an auditable history. An example `ProtectedTaskRegistry` shows how an application can refuse agent actions until the exact payload is approved. The on-chain `explainAuthorization` function makes current permission failures inspectable without gas.
 
-**Status:** [public static website](https://agentguardid.vercel.app) deployed on Vercel Hobby with GitHub CI passing. The **smart contracts are NOT yet deployed** on BNB Chain, verified on BscScan, independently audited, or submitted. UI is currently a read-only/prototype control panel; the public Agent ID eligibility checker works without connecting a wallet. Never describe the static website as a live mainnet contract integration.
+**Status:** [public static website](https://agentguardid.vercel.app) deployed on Vercel Hobby with GitHub CI passing. The **smart contracts are NOT yet deployed** on BNB Chain, verified on BscScan, independently audited, or submitted. UI is currently a read-only/prototype control panel; the public Agent ID eligibility checker works without connecting a wallet. The request inspector and live decision explainer work without a wallet after contract deployment; the approval button requires a verified exact-text/hash match and the separate owner wallet. Never describe the static website as a live mainnet contract integration.
 
 ## Project structure
 
@@ -71,8 +71,8 @@ node --check web/app.js
 5. **Verify and publish the exact source code of both contracts on BscScan.** Do not deploy `MockAgentID` on mainnet.
 6. Set `guardAddress` and `taskRegistryAddress` in `web/config.js`. Verify the addresses on BscScan yourself. Only then is the browser app configured for the actual contracts.
 7. Publish `web/` as a static Vercel project (framework preset **Other**, root directory `web`; no build command or paid service needed). The CI workflow can build contracts independently.
-8. Use a **human owner wallet** to create a workspace specifying the ID-holding **agent wallet** and a daily cap. The owner allowlists the actual `ProtectedTaskRegistry` address.
-9. Using the agent wallet, submit a task intent; using the human wallet, inspect and approve it; using the agent wallet, execute the protected task. A second execution should revert on-chain. Each state change requires explicit wallet confirmation and gas.
+8. Use a **human owner wallet different from the Agent ID-holding wallet** to create a workspace specifying the **agent wallet** and a daily cap. The owner allowlists the actual `ProtectedTaskRegistry` address.
+9. Using the agent wallet, submit a task intent; share its **exact text** with the human owner via a channel you trust; using the human wallet, inspect the on-chain request, verify that text hashes to the on-chain digest, then approve it; using the agent wallet, execute the protected task. A second execution should revert on-chain. Each state change requires explicit wallet confirmation and gas.
 
 **Compatibility note:** Standard injected EVM wallet interactions are supported in the prototype. Official Binance Agentic Wallet restricts arbitrary smart contract calls by default; its optional Developer Mode must be enabled inside the Binance App and still requires simulation and explicit confirmation. The website also generates official `baw contract-call preview` commands for the Agentic Wallet address. See `docs/AGENTIC_WALLET.md` for the manual two-step flow. Never build a third-party QR or pairing-code login screen for the hackathon.
 

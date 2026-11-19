@@ -41,8 +41,8 @@ const deployJS = fs.readFileSync(new URL('../web/deploy.js', import.meta.url), '
 for (const id of ['guardAddress','targetAddress','verifyContracts','verificationStatus','configOutput','copyConfig','copyForChat']) {
   assert.match(deploymentHTML, new RegExp('id="' + id + '"'), 'missing deployment control ' + id);
 }
-assert.match(deployJS, /getCode\(CFG\.guardAddress\)/);
-assert.match(deployJS, /getCode\(CFG\.targetAddress\)/);
+assert.match(deployJS, /getCode\(guardAddress\)/);
+assert.match(deployJS, /getCode\(targetAddress\)/);
 assert.match(deployJS, /guard\.agentID\(\)/);
 assert.match(deployJS, /target\.guard\(\)/);
 assert.match(deployJS, /chainId !== 56n/);

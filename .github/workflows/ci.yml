@@ -1,0 +1,27 @@
+name: Contract and UI checks
+on:
+  push:
+  pull_request:
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+      - name: Compile Solidity
+        run: forge build --sizes
+      - name: Run contract tests
+        run: forge test -vv
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check frontend JS syntax
+        run: node --check web/app.js
+      - name: Verify no production deployment placeholders are misrepresented
+        run: node tests/frontend.test.mjs
